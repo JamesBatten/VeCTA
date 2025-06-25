@@ -57,7 +57,7 @@ The decoder reconstructs the continuous vessel from `z_v` ("deviation" mode show
 If you use this code, please cite:
 
 ```bibtex
-@inproceedings{batten2025_vetta,
+@inproceedings{batten2025_vector,
   author    = {Batten, James and Schaap, Michiel and Sinclair, Matthew and Bai, Ying and Glocker, Ben},
   title     = {Vector Representations of Vessel Trees},
   booktitle = {Proceedings of the 8th Medical Imaging with Deep Learning (MIDL)},
