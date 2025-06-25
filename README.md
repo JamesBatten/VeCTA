@@ -1,5 +1,7 @@
 # VECTA: Vessel Segment Transformer Autoencoder
 
+This is the repo for the Vessel Autoencoder component used in the paper Vector Representations of Vessel Trees: https://arxiv.org/abs/2506.11163
+
 VECTA is a deep learning model designed to learn meaningful latent representations of individual vessel segments. It operates as an autoencoder, capable of encoding a sequence of points representing a vessel into a compact latent vector and then decoding it back to its original geometric form.
 
 The architecture is built with PyTorch and leverages a Transformer-based encoder to effectively model the sequential relationships between points along a vessel.
