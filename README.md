@@ -1,46 +1,72 @@
-# VECTA: Vessel Segment Transformer Autoencoder
+# VeCTA: Vessel Centerline Transformer Autoencoder
 
-This is the repo for the Vessel Autoencoder component used in the paper Vector Representations of Vessel Trees: https://arxiv.org/abs/2506.11163
+This repository contains the **official PyTorch implementation** of the *Vessel Centerline Transformer Autoencoder (VeCTA)*—a deep‑learning architecture that learns compact, continuous and **grid‑free** representations of 3‑D vessel segments.
 
-VECTA is a deep learning model designed to learn meaningful latent representations of individual vessel segments. It operates as an autoencoder, capable of encoding a sequence of points representing a vessel into a compact latent vector and then decoding it back to its original geometric form.
+VeCTA is the **Vessel Autoencoder** component in the two‑stage framework presented in our paper:
 
-The architecture is built with PyTorch and leverages a Transformer-based encoder to effectively model the sequential relationships between points along a vessel.
+> **Vector Representations of Vessel Trees**
+> James Batten, Michiel Schaap, Matthew Sinclair, Ying Bai, Ben Glocker
+> *Medical Imaging with Deep Learning (MIDL), 2025*
+> [https://openreview.net/forum?id=ESzOwfBhRv](https://openreview.net/forum?id=ESzOwfBhRv)
 
-## Model Architecture
+VeCTA tokenises complex vessel geometry into a fixed‑length latent vector, enabling downstream tasks such as generative modelling, shape analysis and image‑to‑geometry translation.
 
-The model is composed of two primary components: a **`VesselEncoder`** and a **`VesselDecoder`**, integrated within the main `VesselAutoencoder` module.
+---
 
-### 1. Encoder
+## Key Features
 
-The Encoder's role is to process a sequence of points that define a vessel segment and compress it into a fixed-size latent vector, `z`.
+* **Continuous geometric representation** – grid‑free decoding of a vessel’s 3‑D centre‑line as a continuous function of a 1‑D coordinate, allowing reconstruction at arbitrary resolution.
+* **Transformer‑based encoder** – self‑attention processes the sequence of sampled points, making the model robust to variations in shape, length and complexity.
+* **Implicit neural representation (INR) decoder** – a neural field conditioned on the latent vector predicts 3‑D coordinates and radius for any point along the vessel.
+* **Fourier feature lifting** – sinusoidal embeddings capture high‑frequency geometric details such as curvature and stenosis.
+* **Endpoint‑aware architecture** – optional explicit encoding/decoding of the start and end points for accurate reconstruction and seamless graph integration.
+* **Variational Autoencoder support** – a single flag turns VeCTA into a VAE, yielding a regularised, semantically smooth latent space for generation and interpolation.
 
--   **Input**: A sequence of points representing a vessel segment, where each point has features for 3D position, radius, and time `(x, y, z, r, t)`. It can optionally incorporate the segment's start and end points (`pa`, `pb`) for additional context.
--   **Core Component**: The `VesselEncoder` module, which uses a standard `TransformerEncoder` to process the sequence.
--   **Feature Engineering**:
-    -   Input features (position, time, and optionally radius) are "lifted" into a higher-dimensional space using sinusoidal positional encoding (`add_octaves`), which helps the model interpret spatial and temporal information more effectively.
-    -   Endpoint information can be concatenated with the sequence features at the beginning of the network or just before the final output layer, controlled by the `inject_endpoints` setting.
--   **Processing**: The lifted feature sequence is first passed through an MLP, then processed by the **`TransformerEncoder`**. This allows the model to capture the global context and relationships between all points in the sequence. The Transformer's output is then aggregated via mean pooling.
--   **Output**: The aggregated vector is mapped to the final latent representation `z` through another MLP. The model can be configured to operate as a standard autoencoder or as a **Variational Autoencoder (VAE)**, in which case it outputs a mean (`z_mu`) and log-variance (`z_logvar`) for the latent distribution.
+---
 
-### 2. Decoder
+## Architecture
 
-The Decoder is a conditional generator. It takes the latent vector `z` and a set of time coordinates as input to reconstruct the vessel segment.
+VeCTA is an autoencoder composed of two modules: `VesselEncoder` and `VesselDecoder`.
 
--   **Input**:
-    1.  The latent vector `z` from the encoder.
-    2.  A batch of time coordinates `t_b` at which to generate points.
-    3.  Optionally, the ground-truth start and end points (`pa` and `pb`).
--   **Processing**:
-    1.  The decoder operates in one of two main modes:
-        -   **`default` mode**: Directly predicts the point coordinates `(x, y, z, r)` from the latent vector and encoded time coordinates.
-        -   **`deviation` mode**: Predicts a *deviation* from a linear interpolation between the start point `pa` and end point `pb`. This allows the model to focus on learning the complex curvature of the vessel rather than its absolute position, leading to more stable reconstructions.
-    2.  For inference in `deviation` mode, the decoder can first predict the endpoints (`pa` and `pb`) directly from the latent vector `z` before proceeding with the full path reconstruction.
--   **Output**: The final output is a sequence of points `(x, y, z, r)` that reconstructs the vessel segment at the specified time coordinates.
+### 1 · Vessel Encoder (`vecta.model.vessel_encoder`)
 
-## Project Structure
+The encoder compresses a sequence of points sampled from a vessel surface into a fixed‑size latent vector `z_v`.
 
--   `vecta/model/vessel_autoencoder.py`: Contains the main `VesselAutoencoder` module, which integrates the encoder and decoder into a single network.
--   `vecta/model/vessel_encoder.py`: Defines the `VesselEncoder` that processes a vessel point sequence using an MLP and a Transformer stack to produce a latent vector.
--   `vecta/model/vessel_decoder.py`: Defines the `VesselDecoder` that reconstructs a vessel segment from a latent vector and a set of time coordinates, with support for multiple reconstruction modes.
--   `vecta/common/utils.py`: Provides utility functions, most notably `add_octaves` for sinusoidal positional encoding and data type conversions.
--   `vecta/model/{mlp, norm, nonlinearity, weight_init}.py`: A collection of helper modules for building robust and configurable PyTorch network layers in a clean, modular fashion.
+1. **Input sampling** – a set of `N` points, each `(x, y, z, radius, t)` where `t ∈ [0,1]` is the normalised position along the centre‑line.
+2. **Feature lifting** – coordinates are lifted with sinusoidal Fourier features.
+3. **Endpoint injection *(optional)* –** lifted start (`p_a`) and end (`p_b`) points are concatenated with point features.
+4. **MLP‑A** – projects lifted features to the Transformer working dimension.
+5. **Transformer encoder** – multi‑layer self‑attention models point‑wise dependencies.
+6. **Aggregation & MLP‑B** – mean‑pool the sequence and pass through an MLP. In VAE mode this splits into mean (`z_μ`) and log‑variance (`z_logσ²`).
+
+### 2 · Vessel Decoder (`vecta.model.vessel_decoder`)
+
+The decoder reconstructs the continuous vessel from `z_v` ("deviation" mode shown):
+
+1. **Inputs** – latent vector `z_v` and a batch of time coordinates `t_b ∈ [0,1]`.
+2. **Base interpolation** – a straight line between `p_a` and `p_b`.
+3. **Deviation prediction** – an MLP conditioned on `z_v` and lifted `t_b` predicts `(Δx, Δy, Δz, Δr)`.
+4. **Modulation** – a function `m(t)` forces the deviation to zero at `t=0` and `t=1` so endpoints match exactly.
+5. **Reconstruction** – add the modulated deviation to the base interpolation to obtain the final curve.
+6. **Fourier inversion** – an efficient lookup recovers Euclidean endpoints from predicted Fourier features during inference.
+
+---
+
+## Citation
+
+If you use this code, please cite:
+
+```bibtex
+@inproceedings{batten2025_vecta,
+  author    = {Batten, James and Schaap, Michiel and Sinclair, Matthew and Bai, Ying and Glocker, Ben},
+  title     = {Vector Representations of Vessel Trees},
+  booktitle = {Proceedings of the 8th Medical Imaging with Deep Learning (MIDL)},
+  year      = {2025},
+  note      = {Oral presentation},
+  url       = {https://openreview.net/forum?id=ESzOwfBhRv}
+}
+```
+
+---
+
+*Licensed under the Apache 2.0 licence unless stated otherwise.*
