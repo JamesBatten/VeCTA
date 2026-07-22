@@ -34,4 +34,4 @@ If you use this code, please cite:
 
 ---
 
-*Licensed under the Apache 2.0 licence unless stated otherwise.*
+*Licensed under the [Apache License 2.0](LICENSE) unless stated otherwise.*
